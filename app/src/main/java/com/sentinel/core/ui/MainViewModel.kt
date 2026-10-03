@@ -17,6 +17,7 @@ import com.sentinel.core.memory.VectorMathUtils
 import com.sentinel.core.media.MediaScanner
 import android.net.Uri
 import android.app.Application
+import com.sentinel.core.scheduler.AgentWorkManager
 import androidx.lifecycle.AndroidViewModel
 import com.sentinel.core.network.LlmService
 import com.sentinel.core.network.NetworkModule
@@ -63,6 +64,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private val swarmOrchestrator = SwarmOrchestrator(
+        context = application,
         onLog = { logMsg -> addLog(logMsg) }
     )
 
@@ -149,7 +151,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            // Hard Intercept 4: Omnimodal RAG Document Search
+            // Hard Intercept 4: Proactive Scheduling
+            if (lowerCommand.startsWith("schedule") || lowerCommand.contains("every morning") || lowerCommand.contains("in ") && lowerCommand.contains("minutes")) {
+                addLog("[INTERCEPT] Proactive Scheduler triggered.")
+
+                val actionGoal = lowerCommand.replace("schedule", "").trim()
+
+                try {
+                    val workManager = AgentWorkManager(activity)
+                    val resultMsg = workManager.scheduleTask(lowerCommand, actionGoal)
+                    addLog("[SCHEDULER] $resultMsg")
+                    addMessage(resultMsg, isUser = false)
+                } catch (e: Exception) {
+                    addLog("[ERROR] Failed to schedule task: ${e.message}")
+                    addMessage("Failed to schedule background task.", isUser = false)
+                }
+                return@launch
+            }
+
+            // Hard Intercept 5: Omnimodal RAG Document Search
             if (lowerCommand.startsWith("find photo") || lowerCommand.startsWith("search document") || lowerCommand.startsWith("find pdf")) {
                 addLog("[INTERCEPT] Omnimodal Document Search triggered.")
 
@@ -189,6 +209,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } catch (e: Exception) {
                     addLog("[ERROR] RAG Search failed: ${e.message}")
                     addMessage("Failed to search documents.", isUser = false)
+                }
+                return@launch
+            }
+
+            // Hard Intercept 6: Multi-Agent Swarm for Complex Queries
+            if (lowerCommand.contains("search") && lowerCommand.contains("and") || lowerCommand.contains("summarize") || lowerCommand.contains("research")) {
+                addLog("[INTERCEPT] Multi-Agent Swarm triggered for complex task.")
+                _isGenerating.value = true
+                try {
+                    val result = swarmOrchestrator.dispatch(command)
+                    addLog("[ORCHESTRATOR] Swarm task complete.")
+                    addMessage(result, isUser = false)
+                } catch (e: Exception) {
+                    addLog("[ERROR] Swarm execution failed: ${e.message}")
+                    addMessage("Failed to execute complex swarm task.", isUser = false)
+                } finally {
+                    _isGenerating.value = false
                 }
                 return@launch
             }

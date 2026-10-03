@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +32,7 @@ fun DualPaneMainScreen(
 
     var inputText by remember { mutableStateOf("") }
     var showSettings by remember { mutableStateOf(false) }
+    var showMatrix by remember { mutableStateOf(true) }
 
     if (showSettings) {
         val serverUrl by viewModel.serverUrl.collectAsState()
@@ -59,6 +61,9 @@ fun DualPaneMainScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
+                    IconButton(onClick = { showMatrix = !showMatrix }) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Toggle Matrix")
+                    }
                     IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
@@ -71,28 +76,15 @@ fun DualPaneMainScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Top Half: Execution Matrix (Terminal Log)
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .background(Color.Black)
-                    .padding(8.dp)
-            ) {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(executionLogs) { log ->
-                        Text(
-                            text = log,
-                            color = Color.Green,
-                            fontFamily = FontFamily.Monospace,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(vertical = 2.dp)
-                        )
-                    }
-                }
-            }
+            if (showMatrix) {
+                // Top Half: Execution Matrix (Terminal Log)
+                ExecutionMatrixScreen(
+                    logs = executionLogs,
+                    modifier = Modifier.weight(1f)
+                )
 
-            Divider(color = Color.DarkGray, thickness = 2.dp)
+                HorizontalDivider(color = Color.DarkGray, thickness = 2.dp)
+            }
 
             // Bottom Half: Chat / Interaction
             Box(
