@@ -17,22 +17,35 @@ class OmniNotificationListenerService : NotificationListenerService() {
         super.onNotificationPosted(sbn)
         sbn?.let {
             val packageName = it.packageName
-            val extras = it.notification.extras
-            val title = extras.getString("android.title") ?: ""
-            val text = extras.getCharSequence("android.text")?.toString() ?: ""
 
-            Log.d("OmniListener", "Notification from $packageName: $title - $text")
-
-            val fact = MemoryFact(
-                factKey = "notification_$packageName",
-                factValue = "$title: $text"
+            // Filter for critical communication apps
+            val criticalApps = listOf(
+                "com.whatsapp",
+                "com.google.android.apps.messaging",
+                "org.telegram.messenger",
+                "com.facebook.orca" // Messenger
             )
 
-            serviceScope.launch {
-                try {
-                    SentinelApp.database.memoryDao().insertFact(fact)
-                } catch (e: Exception) {
-                    Log.e("OmniListener", "Failed to save notification to memory", e)
+            if (criticalApps.contains(packageName)) {
+                val extras = it.notification.extras
+                val title = extras.getCharSequence("android.title")?.toString() ?: ""
+                val text = extras.getCharSequence("android.text")?.toString() ?: ""
+
+                if (title.isNotBlank() && text.isNotBlank()) {
+                    Log.d("OmniListener", "Critical Notification from $packageName: $title - $text")
+
+                    val fact = MemoryFact(
+                        factKey = "unread_msg_$packageName",
+                        factValue = "Message from $title: $text"
+                    )
+
+                    serviceScope.launch {
+                        try {
+                            SentinelApp.database.memoryDao().insertFact(fact)
+                        } catch (e: Exception) {
+                            Log.e("OmniListener", "Failed to save notification to memory", e)
+                        }
+                    }
                 }
             }
         }
