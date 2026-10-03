@@ -23,6 +23,7 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
 
     <!-- Audio / Voice Permissions -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -85,6 +86,15 @@
             android:name=".services.MediaProjectionService"
             android:foregroundServiceType="mediaProjection"
             android:exported="false" />
+
+        <!-- Auto-Responder Call Guard -->
+        <receiver
+            android:name=".communications.CallGuardReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>
