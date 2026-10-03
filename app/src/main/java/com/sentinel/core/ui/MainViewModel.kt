@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import android.content.Intent
+import com.sentinel.core.react.DeviceIntentManager
+import com.sentinel.core.communications.MessageManager
 
 data class ChatMessage(val content: String, val isUser: Boolean)
 
@@ -36,7 +39,62 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             addLog("> INITIATING COMMAND: $command")
 
-            // Analyze risk
+            val lowerCommand = command.lowercase().trim()
+
+            // Hard Intercept 1: Open Settings
+            if (lowerCommand == "open settings" || lowerCommand == "settings") {
+                addLog("[INTERCEPT] Native Settings routing triggered.")
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    activity.startActivity(intent)
+                    addMessage("Intent Executed: Opening Settings", isUser = false)
+                } catch (e: Exception) {
+                    addLog("[ERROR] Failed to open settings: ${e.message}")
+                    addMessage("Failed to open Settings.", isUser = false)
+                }
+                return@launch
+            }
+
+            // Hard Intercept 2: App Launching
+            if (lowerCommand.startsWith("open ")) {
+                val appName = lowerCommand.substringAfter("open ").trim()
+                addLog("[INTERCEPT] Native App Launch routing triggered for '$appName'.")
+                val deviceIntentManager = DeviceIntentManager(activity)
+                val success = deviceIntentManager.launchAppByFuzzyName(appName)
+                if (success) {
+                    addMessage("Intent Executed: Opening $appName", isUser = false)
+                } else {
+                    addMessage("Could not find an app matching '$appName'.", isUser = false)
+                }
+                return@launch
+            }
+
+            // Hard Intercept 3: Communications
+            if (lowerCommand.startsWith("message ") || lowerCommand.startsWith("text ")) {
+                val keyword = if (lowerCommand.startsWith("message ")) "message " else "text "
+                val remaining = lowerCommand.substringAfter(keyword).trim()
+
+                // Extremely simple parser: "message [Name] [Payload]" or "message [Name]"
+                val parts = remaining.split(" ", limit = 2)
+                val contactName = parts.getOrNull(0) ?: ""
+                val payload = parts.getOrNull(1) ?: ""
+
+                addLog("[INTERCEPT] Native Messaging routing triggered for contact '$contactName'.")
+
+                val messageManager = MessageManager(activity)
+                val success = messageManager.prefillSmsMessage(contactName, payload)
+
+                if (success) {
+                    addMessage("Intent Executed: Prepared message for $contactName", isUser = false)
+                } else {
+                    addMessage("Could not resolve contact '$contactName'.", isUser = false)
+                }
+                return@launch
+            }
+
+            // Analyze risk and fallback to Swarm / ReAct
             val isHighRisk = checkRiskLevel(command)
             if (isHighRisk) {
                 addLog("[SECURITY] High Risk action detected. Requesting Biometric Auth.")
