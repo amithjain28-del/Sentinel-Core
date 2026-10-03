@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,9 +26,29 @@ fun DualPaneMainScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val executionLogs by viewModel.executionLogs.collectAsState()
+    val isGenerating by viewModel.isGenerating.collectAsState()
     val scope = rememberCoroutineScope()
 
     var inputText by remember { mutableStateOf("") }
+    var showSettings by remember { mutableStateOf(false) }
+
+    if (showSettings) {
+        val serverUrl by viewModel.serverUrl.collectAsState()
+        val modelName by viewModel.modelName.collectAsState()
+        val temperature by viewModel.temperature.collectAsState()
+
+        SettingsScreen(
+            onNavigateBack = { showSettings = false },
+            serverUrl = serverUrl,
+            modelName = modelName,
+            temperature = temperature,
+            onServerUrlChange = { viewModel.updateServerUrl(it) },
+            onModelNameChange = { viewModel.updateModelName(it) },
+            onTemperatureChange = { viewModel.updateTemperature(it) },
+            llmService = viewModel.llmService
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -36,7 +57,12 @@ fun DualPaneMainScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                ),
+                actions = {
+                    IconButton(onClick = { showSettings = true }) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                    }
+                }
             )
         }
     ) { padding ->
@@ -106,6 +132,9 @@ fun DualPaneMainScreen(
                     }
 
                     // Input area
+                    if (isGenerating) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

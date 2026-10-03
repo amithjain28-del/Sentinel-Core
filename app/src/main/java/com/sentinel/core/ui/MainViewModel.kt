@@ -16,6 +16,16 @@ import com.sentinel.core.SentinelApp
 import com.sentinel.core.memory.VectorMathUtils
 import com.sentinel.core.media.MediaScanner
 import android.net.Uri
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import com.sentinel.core.network.LlmService
+import com.sentinel.core.network.NetworkModule
+import com.sentinel.core.network.OllamaChatRequest
+import com.sentinel.core.network.OllamaOptions
+import com.sentinel.core.orchestrator.PromptOrchestrator
+import com.sentinel.core.settings.SettingsDataStore
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 
 data class ChatMessage(val content: String, val isUser: Boolean)
 
@@ -23,18 +33,59 @@ data class MainUiState(
     val messages: List<ChatMessage> = emptyList()
 )
 
-class MainViewModel : ViewModel() {
+class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
     private val _executionLogs = MutableStateFlow<List<String>>(emptyList())
     val executionLogs: StateFlow<List<String>> = _executionLogs.asStateFlow()
 
+    private val _isGenerating = MutableStateFlow(false)
+    val isGenerating: StateFlow<Boolean> = _isGenerating.asStateFlow()
+
+    private val settingsDataStore = SettingsDataStore(application)
+
+    val serverUrl = settingsDataStore.serverUrlFlow.stateIn(viewModelScope, SharingStarted.Eagerly, "http://localhost:11434/")
+    val modelName = settingsDataStore.modelNameFlow.stateIn(viewModelScope, SharingStarted.Eagerly, "llama3.2")
+    val temperature = settingsDataStore.temperatureFlow.stateIn(viewModelScope, SharingStarted.Eagerly, 0.7f)
+
+    private val networkModule = NetworkModule("http://localhost:11434/")
+    val llmService = LlmService(networkModule)
+
+    private val promptOrchestrator = PromptOrchestrator(application)
+
+    init {
+        viewModelScope.launch {
+            serverUrl.collect { url ->
+                networkModule.updateBaseUrl(url)
+            }
+        }
+    }
+
     private val swarmOrchestrator = SwarmOrchestrator(
         onLog = { logMsg -> addLog(logMsg) }
     )
 
     private val biometricEnclave = BiometricEnclave()
+
+    fun updateServerUrl(url: String) {
+        viewModelScope.launch {
+            settingsDataStore.saveServerUrl(url)
+            networkModule.updateBaseUrl(url)
+        }
+    }
+
+    fun updateModelName(name: String) {
+        viewModelScope.launch {
+            settingsDataStore.saveModelName(name)
+        }
+    }
+
+    fun updateTemperature(temp: Float) {
+        viewModelScope.launch {
+            settingsDataStore.saveTemperature(temp)
+        }
+    }
 
     fun processCommand(command: String, activity: androidx.fragment.app.FragmentActivity) {
         // 1. Add user message to UI
@@ -142,34 +193,38 @@ class MainViewModel : ViewModel() {
                 return@launch
             }
 
-            // Analyze risk and fallback to Swarm / ReAct
-            val isHighRisk = checkRiskLevel(command)
-            if (isHighRisk) {
-                addLog("[SECURITY] High Risk action detected. Requesting Biometric Auth.")
-                addMessage("This is a sensitive action. Please authenticate.", isUser = false)
+            // Final Fallback: Local LLM Engine Conversation
+            _isGenerating.value = true
+            addLog("[LLM] Routing conversational query to PromptOrchestrator...")
 
-                val authResult = biometricEnclave.authenticate(activity)
-                if (authResult) {
-                    addLog("[SECURITY] Biometric Auth SUCCESS.")
-                    executeSwarm(command)
+            try {
+                val messages = promptOrchestrator.buildPrompt(command)
+                val request = OllamaChatRequest(
+                    model = modelName.value,
+                    messages = messages,
+                    stream = false,
+                    options = OllamaOptions(temperature = temperature.value)
+                )
+
+                addLog("[LLM] Sending request to ${serverUrl.value}...")
+                val result = llmService.generateChat(request)
+
+                if (result.isSuccess) {
+                    val responseText = result.getOrNull()?.message?.content ?: "Empty response."
+                    addLog("[LLM] Inference complete.")
+                    addMessage(responseText, isUser = false)
                 } else {
-                    addLog("[SECURITY] Biometric Auth FAILED or CANCELED.")
-                    addMessage("Authentication failed. Action aborted.", isUser = false)
+                    val error = result.exceptionOrNull()?.message ?: "Unknown network error."
+                    addLog("[LLM] Inference failed: $error")
+                    addMessage("I'm sorry, I couldn't reach the local AI server. Error: $error", isUser = false)
                 }
-            } else {
-                executeSwarm(command)
+            } catch (e: Exception) {
+                addLog("[ERROR] Unhandled exception during LLM pipeline: ${e.message}")
+                addMessage("An unexpected error occurred during processing.", isUser = false)
+            } finally {
+                _isGenerating.value = false
             }
         }
-    }
-
-    private suspend fun executeSwarm(command: String) {
-        addLog("[ORCHESTRATOR] Spawning swarm agents...")
-        addMessage("Processing your request...", isUser = false)
-
-        val result = swarmOrchestrator.dispatch(command)
-
-        addLog("[ORCHESTRATOR] Swarm task complete.")
-        addMessage(result, isUser = false)
     }
 
     private fun checkRiskLevel(command: String): Boolean {
