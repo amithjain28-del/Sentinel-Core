@@ -12,6 +12,10 @@ import kotlinx.coroutines.launch
 import android.content.Intent
 import com.sentinel.core.react.DeviceIntentManager
 import com.sentinel.core.communications.MessageManager
+import com.sentinel.core.SentinelApp
+import com.sentinel.core.memory.VectorMathUtils
+import com.sentinel.core.media.MediaScanner
+import android.net.Uri
 
 data class ChatMessage(val content: String, val isUser: Boolean)
 
@@ -90,6 +94,50 @@ class MainViewModel : ViewModel() {
                     addMessage("Intent Executed: Prepared message for $contactName", isUser = false)
                 } else {
                     addMessage("Could not resolve contact '$contactName'.", isUser = false)
+                }
+                return@launch
+            }
+
+            // Hard Intercept 4: Omnimodal RAG Document Search
+            if (lowerCommand.startsWith("find photo") || lowerCommand.startsWith("search document") || lowerCommand.startsWith("find pdf")) {
+                addLog("[INTERCEPT] Omnimodal Document Search triggered.")
+
+                // Simple mock vector for demonstration (in reality, an ONNX model would embed `command`)
+                val mockQueryVector = FloatArray(512) { kotlin.random.Random.nextFloat() }
+
+                try {
+                    val allDocs = SentinelApp.database.agentMemoryDao().getAllDocuments()
+
+                    if (allDocs.isEmpty()) {
+                        addLog("[RAG] Room DB empty. Scanning MediaStore...")
+                        val scanner = MediaScanner(activity)
+                        val images = scanner.scanLocalImages()
+                        val pdfs = scanner.scanLocalPdfs()
+                        addLog("[RAG] Found ${images.size} images and ${pdfs.size} PDFs on device.")
+                        addMessage("Memory DB is empty. I've found ${images.size} images and ${pdfs.size} PDFs, but they need to be embedded first.", isUser = false)
+                        return@launch
+                    }
+
+                    val topMatches = VectorMathUtils.findTopMatches(mockQueryVector, allDocs, topK = 1)
+
+                    if (topMatches.isNotEmpty() && topMatches[0].second > 0.5f) { // Arbitrary threshold
+                        val bestMatch = topMatches[0].first
+                        addLog("[RAG] Match found: ${bestMatch.filename} (Score: ${topMatches[0].second})")
+
+                        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                            data = Uri.parse(bestMatch.uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        activity.startActivity(viewIntent)
+                        addMessage("Opened best match: ${bestMatch.filename}", isUser = false)
+                    } else {
+                        addLog("[RAG] No confident matches found in Room.")
+                        addMessage("I searched my memory but could not find a matching document.", isUser = false)
+                    }
+                } catch (e: Exception) {
+                    addLog("[ERROR] RAG Search failed: ${e.message}")
+                    addMessage("Failed to search documents.", isUser = false)
                 }
                 return@launch
             }
