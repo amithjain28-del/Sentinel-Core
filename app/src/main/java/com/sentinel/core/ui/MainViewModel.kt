@@ -3,7 +3,7 @@ package com.sentinel.core.ui
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.sentinel.core.security.BiometricEnclave
+import com.sentinel.core.security.SecurityManager
 import com.sentinel.core.swarm.SwarmOrchestrator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -68,7 +68,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onLog = { logMsg -> addLog(logMsg) }
     )
 
-    private val biometricEnclave = BiometricEnclave()
+    private val biometricEnclave = SecurityManager()
 
     fun updateServerUrl(url: String) {
         viewModelScope.launch {
@@ -218,9 +218,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("[INTERCEPT] Multi-Agent Swarm triggered for complex task.")
                 _isGenerating.value = true
                 try {
-                    val result = swarmOrchestrator.dispatch(command)
+                    val result = swarmOrchestrator.dispatch(command, activity)
                     addLog("[ORCHESTRATOR] Swarm task complete.")
                     addMessage(result, isUser = false)
+                } catch (e: SecurityException) {
+                    addLog("[SECURITY] Execution halted: ${e.message}")
+                    addMessage("Action cancelled. Biometric verification failed or was denied.", isUser = false)
                 } catch (e: Exception) {
                     addLog("[ERROR] Swarm execution failed: ${e.message}")
                     addMessage("Failed to execute complex swarm task.", isUser = false)

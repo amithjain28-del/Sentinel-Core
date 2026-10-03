@@ -17,7 +17,7 @@ class PromptOrchestrator(private val context: Context) {
 
     suspend fun buildPrompt(userGoal: String): List<OllamaMessage> = withContext(Dispatchers.IO) {
         val systemTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-        val batteryPct = getBatteryPercentage()
+        val deviceContext = DeviceContextState(context).getHardwareContextString()
 
         // Retrieve RAG Context (Just mock or fetch recent for now, full RAG requires embedding the goal)
         // Here we just fetch recent memory facts to give basic context.
@@ -39,7 +39,7 @@ class PromptOrchestrator(private val context: Context) {
         val systemPrompt = """
             You are Sentinel-Core, an elite autonomous AI agent running directly on the user's Android device.
             Current System Time: $systemTime
-            Device Battery: $batteryPct%
+            $deviceContext
 
             Recent Device Memory / Notifications:
             $recentMemory
@@ -58,19 +58,5 @@ class PromptOrchestrator(private val context: Context) {
             OllamaMessage(role = "system", content = systemPrompt),
             OllamaMessage(role = "user", content = userGoal)
         )
-    }
-
-    private fun getBatteryPercentage(): Int {
-        val batteryStatus: Intent? = IntentFilter(Intent.ACTION_BATTERY_CHANGED).let { ifilter ->
-            context.registerReceiver(null, ifilter)
-        }
-        val level: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-        val scale: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-
-        return if (level != -1 && scale != -1) {
-            (level * 100 / scale.toFloat()).toInt()
-        } else {
-            -1
-        }
     }
 }

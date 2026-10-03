@@ -5,6 +5,8 @@ import com.sentinel.core.SentinelApp
 import com.sentinel.core.bridge.WebResearchScraper
 import com.sentinel.core.communications.MessageManager
 import com.sentinel.core.react.DeviceIntentManager
+import com.sentinel.core.security.SecurityManager
+import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -16,7 +18,7 @@ class SwarmOrchestrator(
     private val context: Context,
     private val onLog: (String) -> Unit
 ) {
-    suspend fun dispatch(command: String): String = withContext(Dispatchers.IO) {
+    suspend fun dispatch(command: String, activity: FragmentActivity? = null): String = withContext(Dispatchers.IO) {
         onLog("[SWARM] Decomposing complex goal: '$command'")
 
         // Use withTimeout to ensure sub-agents don't hang the parent indefinitely
@@ -41,7 +43,7 @@ class SwarmOrchestrator(
         }
 
         // Once context is gathered, trigger the ActionAgent sequentially
-        val actionResult = runActionAgent(command, finalContext)
+        val actionResult = runActionAgent(command, finalContext, activity)
         return@withContext actionResult
     }
 
@@ -72,9 +74,27 @@ class SwarmOrchestrator(
         }
     }
 
-    private fun runActionAgent(command: String, synthesizedContext: String): String {
+    private suspend fun runActionAgent(command: String, synthesizedContext: String, activity: FragmentActivity?): String {
         onLog("[ActionAgent] Analyzing intent for execution...")
         val lower = command.lowercase()
+
+        val isHighRisk = lower.contains("text") || lower.contains("message") ||
+                         lower.contains("open") || lower.contains("launch") ||
+                         lower.contains("call")
+
+        if (isHighRisk) {
+            if (activity == null) {
+                onLog("[SECURITY] High Risk action queued but no UI context available for Biometric validation. Aborting.")
+                throw SecurityException("High risk actions require active user authentication.")
+            }
+            onLog("[SECURITY] High Risk action queued. Prompting Biometric Enclave...")
+            val isAuthenticated = SecurityManager().authenticateUser(activity)
+            if (!isAuthenticated) {
+                onLog("[SECURITY] Authentication failed or cancelled. Aborting action.")
+                throw SecurityException("User cancelled biometric authentication.")
+            }
+            onLog("[SECURITY] Identity verified.")
+        }
 
         return if (lower.contains("text") || lower.contains("message")) {
             val contactName = command.substringAfter("to ").substringBefore(" ").trim()
