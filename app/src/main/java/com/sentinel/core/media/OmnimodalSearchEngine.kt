@@ -10,7 +10,7 @@ import com.tom_roush.pdfbox.text.PDFTextStripper
 import java.io.InputStream
 import kotlin.math.sqrt
 import com.sentinel.core.SentinelApp
-import com.sentinel.core.memory.DocumentEmbedding
+import com.sentinel.core.memory.entity.DocumentEmbedding
 import com.sentinel.core.memory.VectorMathUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

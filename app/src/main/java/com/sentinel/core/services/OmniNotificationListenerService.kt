@@ -4,7 +4,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.sentinel.core.SentinelApp
-import com.sentinel.core.memory.MemoryFact
+import com.sentinel.core.memory.entity.MemoryFact
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
