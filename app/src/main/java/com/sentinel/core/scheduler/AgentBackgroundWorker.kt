@@ -3,9 +3,11 @@ package com.sentinel.core.scheduler
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.sentinel.core.swarm.SwarmOrchestrator
@@ -56,6 +58,14 @@ class AgentBackgroundWorker(
             .setAutoCancel(true)
             .build()
 
-        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+            } else {
+                Log.w("AgentWorker", "Missing POST_NOTIFICATIONS permission.")
+            }
+        } else {
+            notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+        }
     }
 }

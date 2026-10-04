@@ -38,7 +38,8 @@ object VectorMathUtils {
             norm2 += b * b
         }
 
-        return if (norm1 == 0.0f || norm2 == 0.0f) 0.0f else (dotProduct / (sqrt(norm1.toDouble()) * sqrt(norm2.toDouble()))).toFloat()
+        val denominator = sqrt(norm1.toDouble()) * sqrt(norm2.toDouble())
+        return if (denominator == 0.0) 0.0f else (dotProduct / denominator).toFloat()
     }
 
     fun floatArrayToByteArray(floatArray: FloatArray): ByteArray {

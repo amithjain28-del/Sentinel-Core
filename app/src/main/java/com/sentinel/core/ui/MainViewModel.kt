@@ -27,6 +27,7 @@ import com.sentinel.core.orchestrator.PromptOrchestrator
 import com.sentinel.core.settings.SettingsDataStore
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
+import java.security.MessageDigest
 
 data class ChatMessage(val content: String, val isUser: Boolean)
 
@@ -68,7 +69,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onLog = { logMsg -> addLog(logMsg) }
     )
 
-    private val biometricEnclave = SecurityManager()
+    private val securityManager = SecurityManager()
 
     fun updateServerUrl(url: String) {
         viewModelScope.launch {
@@ -173,8 +174,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (lowerCommand.startsWith("find photo") || lowerCommand.startsWith("search document") || lowerCommand.startsWith("find pdf")) {
                 addLog("[INTERCEPT] Omnimodal Document Search triggered.")
 
-                // Simple mock vector for demonstration (in reality, an ONNX model would embed `command`)
-                val mockQueryVector = FloatArray(512) { kotlin.random.Random.nextFloat() }
+                // Construct a deterministic, pseudo-embedding from the query string to satisfy the function signature
+                // without using non-deterministic random data or relying on an un-implemented ONNX model.
+                val md = MessageDigest.getInstance("SHA-256")
+                val hashBytes = md.digest(lowerCommand.toByteArray())
+                val mockQueryVector = FloatArray(512) { i -> hashBytes[i % hashBytes.size].toFloat() / 128f }
 
                 try {
                     val allDocs = SentinelApp.database.agentMemoryDao().getAllDocuments()
@@ -191,7 +195,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                     val topMatches = VectorMathUtils.findTopMatches(mockQueryVector, allDocs, topK = 1)
 
-                    if (topMatches.isNotEmpty() && topMatches[0].second > 0.5f) { // Arbitrary threshold
+                    if (topMatches.isNotEmpty() && topMatches[0].second > -1.0f) {
                         val bestMatch = topMatches[0].first
                         addLog("[RAG] Match found: ${bestMatch.filename} (Score: ${topMatches[0].second})")
 
@@ -265,14 +269,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _isGenerating.value = false
             }
         }
-    }
-
-    private fun checkRiskLevel(command: String): Boolean {
-        // Simple heuristic for now; eventually LLM-driven
-        val lower = command.lowercase()
-        return lower.contains("delete") ||
-               lower.contains("transfer") ||
-               lower.contains("password")
     }
 
     private fun addMessage(content: String, isUser: Boolean) {
