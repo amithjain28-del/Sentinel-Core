@@ -81,6 +81,9 @@ dependencies {
     // Web scraping
     implementation("org.jsoup:jsoup:1.17.2")
 
+    // DataStore
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+
     // PDF processing
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
