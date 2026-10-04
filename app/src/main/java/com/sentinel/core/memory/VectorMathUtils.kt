@@ -2,6 +2,7 @@ package com.sentinel.core.memory
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.sentinel.core.memory.entity.DocumentEmbedding
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.sqrt
